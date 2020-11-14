@@ -28,7 +28,7 @@ from utils import set_path, create_logger, save_checkpoint, count_parameters, Ge
 from data_objects.DeepSpeakerDataset import DeepSpeakerDataset
 from data_objects.VoxcelebTestset import VoxcelebTestset
 from functions import train_from_scratch, validate_verification
-from loss import CrossEntropyLoss
+from loss import FocalLoss
 
 
 def parse_args():
@@ -60,7 +60,7 @@ def parse_args():
 def main():
     args = parse_args()
     update_config(cfg, args)
-    assert args.text_arch
+    # assert args.text_arch
 
     # cudnn related setting
     cudnn.benchmark = cfg.CUDNN.BENCHMARK
@@ -73,10 +73,10 @@ def main():
     torch.cuda.manual_seed_all(cfg.SEED)
 
     # Loss
-    criterion = CrossEntropyLoss(cfg.MODEL.NUM_CLASSES).cuda()
+    criterion = FocalLoss().cuda()
 
     # load arch
-    genotype = eval(args.text_arch)
+    genotype = eval("Genotype(normal=[('dil_conv_5x5', 1), ('dil_conv_3x3', 0), ('dil_conv_5x5', 0), ('sep_conv_3x3', 1), ('sep_conv_3x3', 1), ('sep_conv_3x3', 2), ('dil_conv_3x3', 2), ('max_pool_3x3', 1)], normal_concat=range(2, 6), reduce=[('max_pool_3x3', 1), ('max_pool_3x3', 0), ('dil_conv_5x5', 2), ('max_pool_3x3', 1), ('dil_conv_5x5', 3), ('dil_conv_3x3', 2), ('dil_conv_5x5', 4), ('dil_conv_5x5', 2)], reduce_concat=range(2, 6))")
 
     model = Network(cfg.MODEL.INIT_CHANNELS, cfg.MODEL.NUM_CLASSES, cfg.MODEL.LAYERS, genotype)
     model = model.cuda()
@@ -88,7 +88,7 @@ def main():
 
     # resume && make log dir and logger
     if args.load_path and os.path.exists(args.load_path):
-        checkpoint_file = os.path.join(args.load_path, 'Model', 'checkpoint_best.pth')
+        checkpoint_file = args.load_path
         assert os.path.exists(checkpoint_file)
         checkpoint = torch.load(checkpoint_file)
 
@@ -99,6 +99,17 @@ def main():
         best_eer = checkpoint['best_eer']
         optimizer.load_state_dict(checkpoint['optimizer'])
         args.path_helper = checkpoint['path_helper']
+
+        # begin_epoch = cfg.TRAIN.BEGIN_EPOCH
+        # last_epoch = -1
+        # best_eer = 1.0
+        # del checkpoint['state_dict']['classifier.weight']
+        # del checkpoint['state_dict']['classifier.bias']
+        # model.load_state_dict(checkpoint['state_dict'], strict=False)
+        # # best_eer = checkpoint['best_eer']
+        # # optimizer.load_state_dict(checkpoint['optimizer'])
+        # exp_name = args.cfg.split('/')[-1].split('.')[0]
+        # args.path_helper = set_path('/content/drive/My Drive/zalo/AutoSpeech/logs_scratch', exp_name)
 
         logger = create_logger(args.path_helper['log_path'])
         logger.info("=> loaded checkloggpoint '{}'".format(checkpoint_file))
@@ -156,21 +167,22 @@ def main():
         train_from_scratch(cfg, model, optimizer, train_loader, criterion, epoch, writer_dict)
 
         if epoch % cfg.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH - 1:
-            eer = validate_verification(cfg, model, test_loader_verification)
+            # eer = validate_verification(cfg, model, test_loader_verification)
 
-            # remember best acc@1 and save checkpoint
-            is_best = eer < best_eer
-            best_eer = min(eer, best_eer)
+            # # remember best acc@1 and save checkpoint
+            # is_best = eer < best_eer
+            # best_eer = min(eer, best_eer)
 
             # save
             logger.info('=> saving checkpoint to {}'.format(args.path_helper['ckpt_path']))
+            print('=> saving checkpoint to {}'.format(args.path_helper['ckpt_path']))
             save_checkpoint({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'best_eer': best_eer,
                 'optimizer': optimizer.state_dict(),
                 'path_helper': args.path_helper
-            }, is_best, args.path_helper['ckpt_path'], 'checkpoint_{}.pth'.format(epoch))
+            }, True, args.path_helper['ckpt_path'], 'checkpoint_{}.pth'.format(epoch))
 
         lr_scheduler.step(epoch)
 

@@ -8,7 +8,7 @@ n_fft = 512
 ## Audio
 sampling_rate = 16000
 # Number of spectrogram frames in a partial utterance
-partials_n_frames = 300     # 3000 ms
+partials_n_frames = 0     # 3000 ms
 
 
 ## Audio volume normalization

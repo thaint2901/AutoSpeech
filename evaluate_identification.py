@@ -90,7 +90,7 @@ def main():
 
     # dataloader
     test_dataset_identification = DeepSpeakerDataset(
-        Path(cfg.DATASET.DATA_DIR), cfg.DATASET.SUB_DIR, cfg.DATASET.PARTIAL_N_FRAMES, 'test', is_test=True)
+        Path(cfg.DATASET.DATA_DIR), cfg.DATASET.SUB_DIR, cfg.DATASET.PARTIAL_N_FRAMES, None, is_test=True)
 
 
     test_loader_identification = torch.utils.data.DataLoader(

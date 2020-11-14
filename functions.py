@@ -1,9 +1,12 @@
+from pathlib import Path
 import time
 import torch
 import torch.nn.functional as F
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
+import gpustat
+import os
 
 from utils import compute_eer
 from utils import AverageMeter, ProgressMeter, accuracy
@@ -115,7 +118,7 @@ def train_from_scratch(cfg, model, optimizer, train_loader, criterion, epoch, wr
         target = target.cuda(non_blocking=True)
 
         # compute output
-        output = model(input)
+        output = model(input, target)
 
         # measure accuracy and record loss
         loss = criterion(output, target)
@@ -143,6 +146,7 @@ def train_from_scratch(cfg, model, optimizer, train_loader, criterion, epoch, wr
         writer.add_scalar('train_acc5', top5.val, global_steps)
 
         if i % cfg.PRINT_FREQ == 0:
+            gpustat.print_gpustat()
             progress.print(i)
 
 
@@ -154,37 +158,47 @@ def validate_verification(cfg, model, test_loader):
     # switch to evaluate mode
     model.eval()
     labels, distances = [], []
+    output_dir = Path("embs_val_")
 
     with torch.no_grad():
         end = time.time()
-        for i, (input1, input2, label) in enumerate(test_loader):
+        for i, (input1, sound_path) in enumerate(test_loader):
             input1 = input1.cuda(non_blocking=True).squeeze(0)
-            input2 = input2.cuda(non_blocking=True).squeeze(0)
-            label = label.cuda(non_blocking=True)
+            sound_path = Path(sound_path[0])
+            speaker_id, fn = sound_path.parts[-2:]
+            output_id = output_dir.joinpath(speaker_id)
+            os.makedirs(str(output_id), exist_ok=True)
 
             # compute output
-            outputs1 = model(input1).mean(dim=0).unsqueeze(0)
-            outputs2 = model(input2).mean(dim=0).unsqueeze(0)
+            outputs1 = model(input1, 1).mean(dim=0).unsqueeze(0)
+            np.save(f"{output_id}/{fn}", outputs1.detach().cpu().numpy())
 
-            dists = F.cosine_similarity(outputs1, outputs2)
-            dists = dists.data.cpu().numpy()
-            distances.append(dists)
-            labels.append(label.data.cpu().numpy())
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if i % 2000 == 0:
+            if i % 500 == 0:
                 progress.print(i)
+    
+    
+# def validate_verification(cfg, model, test_loader):
+#     batch_time = AverageMeter('Time', ':6.3f')
+#     progress = ProgressMeter(
+#         len(test_loader), batch_time, prefix='Test: ', logger=logger)
 
-        labels = np.array([sublabel for label in labels for sublabel in label])
-        distances = np.array([subdist for dist in distances for subdist in dist])
+#     # switch to evaluate mode
+#     model.eval()
+#     labels, distances = [], []
+#     output_dir = "/media/mdt/PNY/zalo/speech/git/AutoSpeech/embs_"
 
-        eer = compute_eer(distances, labels)
-        logger.info('Test EER: {:.8f}'.format(np.mean(eer)))
+#     with torch.no_grad():
+#         end = time.time()
+#         for i, (input1, path1) in enumerate(test_loader):
+#             input1 = input1.cuda(non_blocking=True).squeeze(0)
 
-    return eer
+#             # compute output
+#             outputs1 = model(input1, 1).mean(dim=0).unsqueeze(0)
+#             # outputs2 = model(input2).mean(dim=0).unsqueeze(0)
+#             fn = os.path.basename(path1[0])
+#             np.save(f"{output_dir}/{fn}", outputs1.detach().cpu().numpy())
+#             if i % 1000 == 0:
+#                 print(i)
 
 
 def validate_identification(cfg, model, test_loader, criterion):
@@ -197,32 +211,34 @@ def validate_identification(cfg, model, test_loader, criterion):
 
     # switch to evaluate mode
     model.eval()
-
+    output_dir = "/mnt/sda1/data/zalo/Train-Test-Data/public-test/embs"
     with torch.no_grad():
         end = time.time()
-        for i, (input, target) in enumerate(test_loader):
-            input = input.cuda(non_blocking=True).squeeze(0)
+        for i, (input, target, feature_path) in enumerate(test_loader):
+            input = input.cuda(non_blocking=True).squeeze(0)  # [5, 300, 257]
             target = target.cuda(non_blocking=True)
 
             # compute output
-            output = model(input)
-            output = torch.mean(output, dim=0, keepdim=True)
-            output = model.forward_classifier(output)
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            top1.update(acc1[0], input.size(0))
-            top5.update(acc5[0], input.size(0))
-            loss = criterion(output, target)
+            output = model(input)  # [5, 2048]
+            output = torch.mean(output, dim=0, keepdim=True)  # [1, 2048]
+            np.save(f"{output_dir}/{feature_path[0]}", output.detach().cpu().numpy())
+            
+        #     output = model.forward_classifier(output)
+        #     acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        #     top1.update(acc1[0], input.size(0))
+        #     top5.update(acc5[0], input.size(0))
+        #     loss = criterion(output, target)
 
-            losses.update(loss.item(), 1)
+        #     losses.update(loss.item(), 1)
 
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
+        #     # measure elapsed time
+        #     batch_time.update(time.time() - end)
+        #     end = time.time()
 
-            if i % 2000 == 0:
-                progress.print(i)
+        #     if i % 2000 == 0:
+        #         progress.print(i)
 
-        logger.info('Test Acc@1: {:.8f} Acc@5: {:.8f}'.format(top1.avg, top5.avg))
+        # logger.info('Test Acc@1: {:.8f} Acc@5: {:.8f}'.format(top1.avg, top5.avg))
 
     return top1.avg
 

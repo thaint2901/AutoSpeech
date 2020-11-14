@@ -5,3 +5,10 @@ __pycache__/**
 config/__pycache__/**
 data_objects/__pycache__/**
 logs_scratch/**
+
+*.ipynb
+*.html
+*.log
+*.pth
+*_/
+launch.json

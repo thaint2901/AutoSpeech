@@ -1,5 +1,6 @@
 from operations import *
 from utils import drop_path
+from .head import ArcFace
 
 
 class Cell(nn.Module):
@@ -95,9 +96,9 @@ class Network(nn.Module):
       C_prev_prev, C_prev = C_prev, cell.multiplier * C_curr
 
     self.global_pooling = nn.AdaptiveAvgPool2d((1, 1))
-    self.classifier = nn.Linear(C_prev, num_classes)
+    self.classifier = ArcFace(C_prev, num_classes)
 
-  def forward(self, input):
+  def forward(self, input, target):
     input = input.unsqueeze(1)
     s0 = self.stem0(input)
     s1 = self.stem1(s0)
@@ -108,7 +109,7 @@ class Network(nn.Module):
     if not self.training:
       return v
 
-    y = self.classifier(v)
+    y = self.classifier(v, target)
 
     return y
 
