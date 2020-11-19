@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def get_eval_paths():
-    data_dir = Path("/media/mdt/PNY/zalo/speech/data/Train-Test-Data/feature/public-test/test")
+    data_dir = Path("/media/mdt/WD/zalo/speech/data/Train-Test-Data/feature/public-test/test")
     path_list = data_dir.glob("*.npy")
     path_list = [i for i in path_list]
     return path_list

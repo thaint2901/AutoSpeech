@@ -150,33 +150,6 @@ def train_from_scratch(cfg, model, optimizer, train_loader, criterion, epoch, wr
             progress.print(i)
 
 
-def validate_verification(cfg, model, test_loader):
-    batch_time = AverageMeter('Time', ':6.3f')
-    progress = ProgressMeter(
-        len(test_loader), batch_time, prefix='Test: ', logger=logger)
-
-    # switch to evaluate mode
-    model.eval()
-    labels, distances = [], []
-    output_dir = Path("embs_val_")
-
-    with torch.no_grad():
-        end = time.time()
-        for i, (input1, sound_path) in enumerate(test_loader):
-            input1 = input1.cuda(non_blocking=True).squeeze(0)
-            sound_path = Path(sound_path[0])
-            speaker_id, fn = sound_path.parts[-2:]
-            output_id = output_dir.joinpath(speaker_id)
-            os.makedirs(str(output_id), exist_ok=True)
-
-            # compute output
-            outputs1 = model(input1, 1).mean(dim=0).unsqueeze(0)
-            np.save(f"{output_id}/{fn}", outputs1.detach().cpu().numpy())
-
-            if i % 500 == 0:
-                progress.print(i)
-    
-    
 # def validate_verification(cfg, model, test_loader):
 #     batch_time = AverageMeter('Time', ':6.3f')
 #     progress = ProgressMeter(
@@ -185,20 +158,49 @@ def validate_verification(cfg, model, test_loader):
 #     # switch to evaluate mode
 #     model.eval()
 #     labels, distances = [], []
-#     output_dir = "/media/mdt/PNY/zalo/speech/git/AutoSpeech/embs_"
+#     output_dir = Path("embs_val_")
 
 #     with torch.no_grad():
 #         end = time.time()
-#         for i, (input1, path1) in enumerate(test_loader):
+#         for i, (input1, sound_path) in enumerate(test_loader):
 #             input1 = input1.cuda(non_blocking=True).squeeze(0)
+#             input1 = input1[:8]
+#             sound_path = Path(sound_path[0])
+#             speaker_id, fn = sound_path.parts[-2:]
+#             output_id = output_dir.joinpath(speaker_id)
+#             os.makedirs(str(output_id), exist_ok=True)
 
 #             # compute output
 #             outputs1 = model(input1, 1).mean(dim=0).unsqueeze(0)
-#             # outputs2 = model(input2).mean(dim=0).unsqueeze(0)
-#             fn = os.path.basename(path1[0])
-#             np.save(f"{output_dir}/{fn}", outputs1.detach().cpu().numpy())
-#             if i % 1000 == 0:
-#                 print(i)
+#             np.save(f"{output_id}/{fn}", outputs1.detach().cpu().numpy())
+
+#             if i % 500 == 0:
+#                 progress.print(i)
+    
+    
+def validate_verification(cfg, model, test_loader):
+    batch_time = AverageMeter('Time', ':6.3f')
+    progress = ProgressMeter(
+        len(test_loader), batch_time, prefix='Test: ', logger=logger)
+
+    # switch to evaluate mode
+    model.eval()
+    labels, distances = [], []
+    output_dir = "embs_"
+
+    with torch.no_grad():
+        end = time.time()
+        for i, (input1, path1) in enumerate(test_loader):
+            input1 = input1.cuda(non_blocking=True).squeeze(0)
+            input1 = input1[:8]
+
+            # compute output
+            outputs1 = model(input1, 1).mean(dim=0).unsqueeze(0)
+            # outputs2 = model(input2).mean(dim=0).unsqueeze(0)
+            fn = os.path.basename(path1[0])
+            np.save(f"{output_dir}/{fn}", outputs1.detach().cpu().numpy())
+            if i % 1000 == 0:
+                print(i)
 
 
 def validate_identification(cfg, model, test_loader, criterion):

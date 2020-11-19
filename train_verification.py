@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 
 from models.model import Network
+from models.model_irse import IR_50
 from config import cfg, update_config
 from utils import set_path, create_logger, save_checkpoint, count_parameters, Genotype
 from data_objects.DeepSpeakerDataset import DeepSpeakerDataset
@@ -57,6 +58,11 @@ def parse_args():
     return args
 
 
+def schedule_lr(optimizer):
+    for params in optimizer.param_groups:
+        params['lr'] /= 10.
+
+
 def main():
     args = parse_args()
     update_config(cfg, args)
@@ -78,13 +84,15 @@ def main():
     # load arch
     genotype = eval("Genotype(normal=[('dil_conv_5x5', 1), ('dil_conv_3x3', 0), ('dil_conv_5x5', 0), ('sep_conv_3x3', 1), ('sep_conv_3x3', 1), ('sep_conv_3x3', 2), ('dil_conv_3x3', 2), ('max_pool_3x3', 1)], normal_concat=range(2, 6), reduce=[('max_pool_3x3', 1), ('max_pool_3x3', 0), ('dil_conv_5x5', 2), ('max_pool_3x3', 1), ('dil_conv_5x5', 3), ('dil_conv_3x3', 2), ('dil_conv_5x5', 4), ('dil_conv_5x5', 2)], reduce_concat=range(2, 6))")
 
-    model = Network(cfg.MODEL.INIT_CHANNELS, cfg.MODEL.NUM_CLASSES, cfg.MODEL.LAYERS, genotype)
+    model = IR_50(cfg.MODEL.NUM_CLASSES)
+    # model = Network(cfg.MODEL.INIT_CHANNELS, cfg.MODEL.NUM_CLASSES, cfg.MODEL.LAYERS, genotype)
     model = model.cuda()
 
-    optimizer = optim.Adam(
-        model.parameters(),
-        lr=cfg.TRAIN.LR
-    )
+    # optimizer = optim.Adam(
+    #     model.parameters(),
+    #     lr=cfg.TRAIN.LR
+    # )
+    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
     # resume && make log dir and logger
     if args.load_path and os.path.exists(args.load_path):
@@ -155,16 +163,19 @@ def main():
     }
 
     # training loop
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, cfg.TRAIN.END_EPOCH, cfg.TRAIN.LR_MIN,
-        last_epoch=last_epoch
-    )
+    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    #     optimizer, cfg.TRAIN.END_EPOCH, cfg.TRAIN.LR_MIN,
+    #     last_epoch=last_epoch
+    # )
 
     for epoch in tqdm(range(begin_epoch, cfg.TRAIN.END_EPOCH), desc='train progress'):
         model.train()
         model.drop_path_prob = cfg.MODEL.DROP_PATH_PROB * epoch / cfg.TRAIN.END_EPOCH
 
         train_from_scratch(cfg, model, optimizer, train_loader, criterion, epoch, writer_dict)
+        
+        if epoch == 210 or epoch == 240 or epoch == 270:
+            schedule_lr(optimizer)
 
         if epoch % cfg.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH - 1:
             # eer = validate_verification(cfg, model, test_loader_verification)
@@ -184,7 +195,7 @@ def main():
                 'path_helper': args.path_helper
             }, True, args.path_helper['ckpt_path'], 'checkpoint_{}.pth'.format(epoch))
 
-        lr_scheduler.step(epoch)
+        # lr_scheduler.step(epoch)
 
 
 if __name__ == '__main__':

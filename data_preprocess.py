@@ -32,9 +32,12 @@ if __name__ == "__main__":
     test_out_dir.mkdir(exist_ok=True, parents=True)
     merged_out_dir.mkdir(exist_ok=True, parents=True)
 
-    speaker_dirs = args.dataset_root.joinpath("dataset").glob("*")
-    speaker_dirs = [speaker_dir for speaker_dir in speaker_dirs]
-    speaker_dirs_train, speaker_dirs_test = train_test_split(speaker_dirs, test_size=0.25, random_state=42)
+    # speaker_dirs = args.dataset_root.joinpath("dataset").glob("*")
+    vox = list(Path("/mnt/sda1/data/voxceleb1").glob("*"))
+    zalo = list(Path("/media/mdt/WD/zalo/speech/data/Train-Test-Data/zalo").glob("*"))
+    zalo_train, zalo_test = train_test_split(zalo, test_size=0.25, random_state=42)
+    speaker_dirs_train = vox + zalo_train
+    speaker_dirs_test = zalo_test
 
     # Preprocess the datasets
     preprocess_voxceleb1(speaker_dirs_train, dev_out_dir, args.skip_existing)

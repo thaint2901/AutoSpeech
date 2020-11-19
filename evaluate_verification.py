@@ -11,6 +11,7 @@ import torch
 import torch.backends.cudnn as cudnn
 
 from models.model import Network
+from models.model_irse import IR_50
 from models import resnet
 from config import cfg, update_config
 from utils import create_logger, Genotype
@@ -58,6 +59,7 @@ def main():
     np.random.seed(cfg.SEED)
     torch.manual_seed(cfg.SEED)
     torch.cuda.manual_seed_all(cfg.SEED)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # model and optimizer
     if cfg.MODEL.NAME == 'model':
@@ -67,18 +69,24 @@ def main():
             genotype = eval("Genotype(normal=[('dil_conv_5x5', 1), ('dil_conv_3x3', 0), ('dil_conv_5x5', 0), ('sep_conv_3x3', 1), ('sep_conv_3x3', 1), ('sep_conv_3x3', 2), ('dil_conv_3x3', 2), ('max_pool_3x3', 1)], normal_concat=range(2, 6), reduce=[('max_pool_3x3', 1), ('max_pool_3x3', 0), ('dil_conv_5x5', 2), ('max_pool_3x3', 1), ('dil_conv_5x5', 3), ('dil_conv_3x3', 2), ('dil_conv_5x5', 4), ('dil_conv_5x5', 2)], reduce_concat=range(2, 6))")
         else:
             raise AssertionError('Please specify the model to evaluate')
-        model = Network(cfg.MODEL.INIT_CHANNELS, cfg.MODEL.NUM_CLASSES, cfg.MODEL.LAYERS, genotype)
+        model = IR_50(1)
+        # model = Network(cfg.MODEL.INIT_CHANNELS, cfg.MODEL.NUM_CLASSES, cfg.MODEL.LAYERS, genotype)
         model.drop_path_prob = 0.0
     else:
         model = eval('resnet.{}(num_classes={})'.format(cfg.MODEL.NAME, cfg.MODEL.NUM_CLASSES))
-    model = model.cuda()
+    model = model.to(device)
+
+    nb_params = sum([param.view(-1).size()[0] for param in model.parameters()])
+    print('nb_params: {}'.format(nb_params))
 
     # resume && make log dir and logger
     if args.load_path and os.path.exists(args.load_path):
-        checkpoint = torch.load(args.load_path)
+        checkpoint = torch.load(args.load_path, map_location="cpu")
 
         # load checkpoint
-        model.load_state_dict(checkpoint['state_dict'])
+        del checkpoint['state_dict']['classifier.weight']
+        del checkpoint['state_dict']['classifier.bias']
+        model.load_state_dict(checkpoint['state_dict'], strict=False)
         args.path_helper = checkpoint['path_helper']
 
         logger = create_logger(os.path.dirname(args.load_path))
@@ -89,12 +97,12 @@ def main():
     logger.info(cfg)
 
     # dataloader
-    test_dataset_verification = VoxcelebTestset(
-        Path(cfg.DATASET.DATA_DIR), cfg.DATASET.PARTIAL_N_FRAMES
-    )
-    # test_dataset_verification = VoxcelebTestsetZalo(
+    # test_dataset_verification = VoxcelebTestset(
     #     Path(cfg.DATASET.DATA_DIR), cfg.DATASET.PARTIAL_N_FRAMES
     # )
+    test_dataset_verification = VoxcelebTestsetZalo(
+        Path(cfg.DATASET.DATA_DIR), cfg.DATASET.PARTIAL_N_FRAMES
+    )
     test_loader_verification = torch.utils.data.DataLoader(
         dataset=test_dataset_verification,
         batch_size=1,
